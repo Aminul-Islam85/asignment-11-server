@@ -59,4 +59,28 @@ router.post("/add", async (req, res) => {
   }
 });
 
+// GET /api/tasks/my?email=buyer@example.com
+router.get("/my", async (req, res) => {
+  try {
+    const email = req.query.email;
+    const tasks = await Task.find({ buyer_email: email }).sort({ created_at: -1 });
+    res.json(tasks);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to load tasks", error: err.message });
+  }
+});
+
+// DELETE /api/tasks/:id
+router.delete("/:id", async (req, res) => {
+  try {
+    const deleted = await Task.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "Task not found" });
+    res.json({ message: "Task deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Error deleting task", error: err.message });
+  }
+});
+
+
+
 module.exports = router;
