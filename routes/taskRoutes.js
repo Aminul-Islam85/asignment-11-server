@@ -1,0 +1,62 @@
+const express = require("express");
+const router = express.Router();
+const Task = require("../models/Task");
+const User = require("../models/User");
+
+// POST /api/tasks/add
+router.post("/add", async (req, res) => {
+  try {
+    const {
+      task_title,
+      task_detail,
+      required_workers,
+      payable_amount,
+      completion_date,
+      submission_info,
+      task_image_url,
+      buyer_email,
+    } = req.body;
+
+    const total_payable = required_workers * payable_amount;
+
+    const buyer = await User.findOne({ email: buyer_email });
+
+    if (!buyer || buyer.role !== "buyer") {
+      return res.status(403).json({ message: "Unauthorized action" });
+    }
+
+    if (buyer.coins < total_payable) {
+      return res.status(400).json({
+        message: "Not enough coins. Please purchase more.",
+        redirect: "/dashboard/payments",
+      });
+    }
+
+    // Deduct coins
+    buyer.coins -= total_payable;
+    await buyer.save();
+
+    // Create task
+    const task = new Task({
+      task_title,
+      task_detail,
+      required_workers,
+      payable_amount,
+      total_payable,
+      completion_date,
+      submission_info,
+      task_image_url,
+      buyer_email: buyer.email,
+      buyer_name: buyer.name,
+      buyer_id: buyer._id,
+    });
+
+    await task.save();
+
+    res.status(201).json({ message: "Task created successfully", task });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+module.exports = router;
