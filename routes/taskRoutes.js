@@ -3,6 +3,7 @@ const router = express.Router();
 const Submission = require("../models/Submission");
 const Task = require("../models/Task");
 const User = require("../models/User");
+const WithdrawRequest = require("../models/WithdrawRequest");
 
 // ✅ POST /api/tasks/add
 router.post("/add", async (req, res) => {
@@ -153,20 +154,119 @@ router.get("/submissions/task/:id", async (req, res) => {
   }
 });
 
-// ✅ PUT /api/submissions/:id/status - Update submission status (approve/reject)
+// ✅ PUT /api/submissions/:id/status - Approve/Reject + Pay Worker
 router.put("/submissions/:id/status", async (req, res) => {
   try {
     const { status } = req.body;
-    const updated = await Submission.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true }
-    );
-    res.json({ message: "Submission status updated", submission: updated });
+
+    const submission = await Submission.findById(req.params.id);
+    if (!submission) {
+      return res.status(404).json({ message: "Submission not found" });
+    }
+
+    // Prevent duplicate processing
+    if (submission.status === "approved" || submission.status === "rejected") {
+      return res.status(400).json({ message: "Submission already processed." });
+    }
+
+    // Update status
+    submission.status = status;
+    await submission.save();
+
+    if (status === "approved") {
+      // ✅ Credit worker
+      const task = await Task.findById(submission.task_id);
+      if (!task) return res.status(404).json({ message: "Task not found" });
+
+      const worker = await User.findOne({ email: submission.worker_email });
+      if (!worker) return res.status(404).json({ message: "Worker not found" });
+
+      worker.coins += task.payable_amount;
+      await worker.save();
+    }
+
+    res.json({ message: "Submission status updated", submission });
   } catch (err) {
     res.status(500).json({ message: "Failed to update status", error: err.message });
   }
 });
+
+
+// ✅ POST /api/tasks/withdraw - Worker requests coin withdrawal
+router.post("/withdraw", async (req, res) => {
+  try {
+    const { email, amount, method } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user || user.role !== "worker") {
+      return res.status(403).json({ message: "Unauthorized request" });
+    }
+
+    if (user.coins < amount) {
+      return res.status(400).json({ message: "Insufficient coin balance." });
+    }
+
+    // Deduct coins
+    user.coins -= amount;
+    await user.save();
+
+    // Save withdraw request (optional: create WithdrawRequest model)
+    console.log(`Withdraw requested: ${email}, amount: ${amount}, method: ${method}`);
+
+    res.json({ message: "Withdraw request submitted." });
+  } catch (err) {
+    res.status(500).json({ message: "Withdraw failed", error: err.message });
+  }
+});
+
+// ✅ POST /api/tasks/purchase - Buyer purchases coins
+router.post("/purchase", async (req, res) => {
+  try {
+    const { email, coins } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user || user.role !== "buyer") {
+      return res.status(403).json({ message: "Only buyers can purchase coins." });
+    }
+
+    user.coins += coins;
+    await user.save();
+
+    res.json({ message: `Successfully purchased ${coins} coins.` });
+  } catch (err) {
+    res.status(500).json({ message: "Purchase failed", error: err.message });
+  }
+});
+
+
+router.post("/withdraw", async (req, res) => {
+  try {
+    const { email, amount, method } = req.body;
+
+    const user = await User.findOne({ email });
+
+    if (!user || user.role !== "worker") {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    if (user.coins < amount) {
+      return res.status(400).json({ message: "Not enough coins to withdraw." });
+    }
+
+    // Deduct coins
+    user.coins -= amount;
+    await user.save();
+
+    // Save withdrawal request
+    const request = new WithdrawRequest({ email, amount, method });
+    await request.save();
+
+    res.status(201).json({ message: "Withdrawal request submitted" });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to submit request", error: err.message });
+  }
+});
+
 
 
 
