@@ -104,7 +104,7 @@ router.get("/available", async (req, res) => {
   }
 });
 
-// ✅ POST /api/submissions (Worker submits task proof)
+// ✅ POST /api/submissions
 router.post("/submissions", async (req, res) => {
   try {
     const { task_id, worker_email, worker_name, proof } = req.body;
@@ -143,7 +143,7 @@ router.get("/submissions/worker/:email", async (req, res) => {
   }
 });
 
-// ✅ GET /api/submissions/task/:id - Buyer views all submissions for a specific task
+// ✅ GET /api/submissions/task/:id
 router.get("/submissions/task/:id", async (req, res) => {
   try {
     const taskId = req.params.id;
@@ -154,7 +154,7 @@ router.get("/submissions/task/:id", async (req, res) => {
   }
 });
 
-// ✅ PUT /api/submissions/:id/status - Approve/Reject + Pay Worker
+// ✅ PUT /api/submissions/:id/status - Approve/Reject + pay worker
 router.put("/submissions/:id/status", async (req, res) => {
   try {
     const { status } = req.body;
@@ -174,7 +174,6 @@ router.put("/submissions/:id/status", async (req, res) => {
     await submission.save();
 
     if (status === "approved") {
-      // ✅ Credit worker
       const task = await Task.findById(submission.task_id);
       if (!task) return res.status(404).json({ message: "Task not found" });
 
@@ -191,54 +190,7 @@ router.put("/submissions/:id/status", async (req, res) => {
   }
 });
 
-
-// ✅ POST /api/tasks/withdraw - Worker requests coin withdrawal
-router.post("/withdraw", async (req, res) => {
-  try {
-    const { email, amount, method } = req.body;
-    const user = await User.findOne({ email });
-
-    if (!user || user.role !== "worker") {
-      return res.status(403).json({ message: "Unauthorized request" });
-    }
-
-    if (user.coins < amount) {
-      return res.status(400).json({ message: "Insufficient coin balance." });
-    }
-
-    // Deduct coins
-    user.coins -= amount;
-    await user.save();
-
-    // Save withdraw request (optional: create WithdrawRequest model)
-    console.log(`Withdraw requested: ${email}, amount: ${amount}, method: ${method}`);
-
-    res.json({ message: "Withdraw request submitted." });
-  } catch (err) {
-    res.status(500).json({ message: "Withdraw failed", error: err.message });
-  }
-});
-
-// ✅ POST /api/tasks/purchase - Buyer purchases coins
-router.post("/purchase", async (req, res) => {
-  try {
-    const { email, coins } = req.body;
-    const user = await User.findOne({ email });
-
-    if (!user || user.role !== "buyer") {
-      return res.status(403).json({ message: "Only buyers can purchase coins." });
-    }
-
-    user.coins += coins;
-    await user.save();
-
-    res.json({ message: `Successfully purchased ${coins} coins.` });
-  } catch (err) {
-    res.status(500).json({ message: "Purchase failed", error: err.message });
-  }
-});
-
-
+// ✅ POST /api/tasks/withdraw
 router.post("/withdraw", async (req, res) => {
   try {
     const { email, amount, method } = req.body;
@@ -267,7 +219,54 @@ router.post("/withdraw", async (req, res) => {
   }
 });
 
+// ✅ POST /api/tasks/purchase
+router.post("/purchase", async (req, res) => {
+  try {
+    const { email, coins } = req.body;
+    const user = await User.findOne({ email });
 
+    if (!user || user.role !== "buyer") {
+      return res.status(403).json({ message: "Only buyers can purchase coins." });
+    }
+
+    user.coins += coins;
+    await user.save();
+
+    res.json({ message: `Successfully purchased ${coins} coins.` });
+  } catch (err) {
+    res.status(500).json({ message: "Purchase failed", error: err.message });
+  }
+});
+
+// ✅ GET /api/tasks/withdraw-requests (Admin view)
+router.get("/withdraw-requests", async (req, res) => {
+  try {
+    const requests = await WithdrawRequest.find().sort({ createdAt: -1 });
+    res.json(requests);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch requests", error: err.message });
+  }
+});
+
+// ✅ DELETE /api/tasks/withdraw-requests/:id (Admin delete)
+router.delete("/withdraw-requests/:id", async (req, res) => {
+  try {
+    await WithdrawRequest.findByIdAndDelete(req.params.id);
+    res.json({ message: "Request removed" });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to delete request", error: err.message });
+  }
+});
+
+// ✅ GET /api/auth/submissions - Admin view of all submissions
+router.get("/all-submissions", async (req, res) => {
+  try {
+    const submissions = await Submission.find().sort({ createdAt: -1 });
+    res.json(submissions);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch submissions", error: err.message });
+  }
+});
 
 
 module.exports = router;
